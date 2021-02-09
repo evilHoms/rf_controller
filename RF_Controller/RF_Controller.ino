@@ -1,8 +1,8 @@
-/* В данно скетче устройство с nrf24l01 модулем представленно в виде передатчика.
+/* В данном скетче устройство с nrf24l01 модулем представленно в виде передатчика.
  Данные в виде структуры Data передаются на приемник с проверкой ключа.
  Для выбора оптимального канала передачи без шумов, сканируется весь
  диапазон частот и выбирается оптимальный. Для подключения приемника
- к данно частоте, на нем следуют так же проводить сканирование частот,
+ к данной частоте, на нем следуют так же проводить сканирование частот,
  и установка того канала, на котором придут данные с предустановленным ключем
  */
 
@@ -10,14 +10,25 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
-#define KEY 1234
+#define KEY 1234 // Ключ безопасности, только при ответе с данным ключем будет произведено подключение
 #define SCAN_ENABLED // Если включено, ищется наиболее чистый канал
 #define NUMBER_OF_SCANS 3 // Сила сканирования, чем больше, тем выше шанс избежать каналы с шумами, каждая итерация ~10 секунд
 #define DEFAULT_CHANNEL 0x60 // Канал, если отключено сканирование
+#define IS_DEBUG // Выводятся сообщения отладки
+#define RF_ENABLED // Передатчик работает, false для тестирования кнопок без передачи данных
 
 #define BTN1_PIN 4
 #define BTN2_PIN 5
 #define BTN3_PIN 6
+#define BTN4_PIN 7
+#define POT1_PIN A0
+
+#define STICK1_X A1
+#define STICK1_Y A2
+#define STICK1_BTN 3
+#define STICK2_X A3
+#define STICK2_Y A4
+#define STICK2_BTN 2
 
 RF24 radio(10,9); // "создать" модуль на пинах 9 и 10 Для Уно
 //RF24 radio(9,53); // для Меги
@@ -25,10 +36,21 @@ RF24 radio(10,9); // "создать" модуль на пинах 9 и 10 Дл�
 byte address[][6] = {"1Node","2Node","3Node","4Node","5Node","6Node"};  //возможные номера труб
 
 typedef struct {
+  bool btn;
+  int x;
+  int y;
+}
+Stick;
+
+typedef struct {
   int key;
   bool btn1; // Переменная для хранения передающихся команд
   bool btn2;
   bool btn3;
+  bool btn4;
+  int pot1;
+  Stick stick1;
+  Stick stick2;
 }
 Data;
 
@@ -36,33 +58,54 @@ Data data;
 
 int scanChannels();
 
+class DebugLogger {
+  public:
+    void printFreeChannel(int freeChannel);
+    void printFreeChannel();
+    void printControlsState(Data data);
+    void printResponse(bool isRadioAvailable, int lastTime, bool response);
+};
+
+DebugLogger logger;
+
 void setup(){
-  Serial.begin(9600); //открываем порт для связи с ПК
+  #ifdef IS_DEBUG
+    Serial.begin(9600); //открываем порт для связи с ПК
+  #endif
 
   pinMode(BTN1_PIN, INPUT_PULLUP);
   pinMode(BTN2_PIN, INPUT_PULLUP);
   pinMode(BTN3_PIN, INPUT_PULLUP);
+  pinMode(BTN4_PIN, INPUT_PULLUP);
+  pinMode(STICK1_BTN, INPUT_PULLUP);
+  pinMode(STICK2_BTN, INPUT_PULLUP);
 
-  radio.begin(); //активировать модуль
-  radio.setAutoAck(1);         //режим подтверждения приёма, 1 вкл 0 выкл
-  radio.setRetries(0,3);     //(время между попыткой достучаться, число попыток)
-  radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
-  radio.setPayloadSize(32);     //размер пакета, в байтах
-
-  radio.openWritingPipe(address[0]);   //мы - труба 0, открываем канал для передачи данных
-
-  radio.setPALevel (RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
-  radio.setDataRate (RF24_1MBPS); //скорость обмена. На выбор RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
-  //должна быть одинакова на приёмнике и передатчике!
-  //при самой низкой скорости имеем самую высокую чувствительность и дальность!!
-  // ВНИМАНИЕ!!! enableAckPayload НЕ РАБОТАЕТ НА СКОРОСТИ 250 kbps!
-
-  radio.powerUp(); //начать работу
-  radio.stopListening();  //не слушаем радиоэфир, мы передатчик
+  #ifdef RF_ENABLED
+    radio.begin(); //активировать модуль
+    radio.setAutoAck(1);         //режим подтверждения приёма, 1 вкл 0 выкл
+    radio.setRetries(0,3);     //(время между попыткой достучаться, число попыток)
+    radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
+    radio.setPayloadSize(32);     //размер пакета, в байтах
+  
+    radio.openWritingPipe(address[0]);   //мы - труба 0, открываем канал для передачи данных
+  
+    radio.setPALevel (RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
+    radio.setDataRate (RF24_1MBPS); //скорость обмена. На выбор RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
+    //должна быть одинакова на приёмнике и передатчике!
+    //при самой низкой скорости имеем самую высокую чувствительность и дальность!!
+    // ВНИМАНИЕ!!! enableAckPayload НЕ РАБОТАЕТ НА СКОРОСТИ 250 kbps!
+  
+    radio.powerUp(); //начать работу
+    radio.stopListening();  //не слушаем радиоэфир, мы передатчик
+  #endif
 }
 
 void loop(void) {
   static bool isScanning = true;
+
+  #ifndef RF_ENABLED
+    isScanning = false;
+  #endif
 
   if (isScanning) {
     int freeChannel = DEFAULT_CHANNEL;
@@ -72,58 +115,74 @@ void loop(void) {
     #endif
     
     if (freeChannel != -1) {
-      Serial.println();
-      Serial.print("Set channel: ");
-      Serial.println(freeChannel, HEX);
+      #ifdef IS_DEBUG
+        logger.printFreeChannel(freeChannel);
+      #endif
       radio.setChannel(freeChannel);  // Устанавливаем канал
       isScanning = false;
     } else {
-      Serial.println("Error: No free Channels!");
+      #ifdef IS_DEBUG
+        logger.printFreeChannel();
+      #endif
       delay(1000);
     }
   } else {
-    bool isBtn1Pressed = !digitalRead(BTN1_PIN);
-    bool isBtn2Pressed = !digitalRead(BTN2_PIN);
-    bool isBtn3Pressed = !digitalRead(BTN3_PIN);
-  
-  //  Build object to transmit
+    //  Build object to transmit
     data.key = KEY;
-    data.btn1 = isBtn1Pressed;
-    data.btn2 = isBtn2Pressed;
-    data.btn3 = isBtn3Pressed;
+    data.btn1 = !digitalRead(BTN1_PIN);
+    data.btn2 = !digitalRead(BTN2_PIN);
+    data.btn3 = !digitalRead(BTN3_PIN);
+    data.btn4 = !digitalRead(BTN4_PIN);
+    data.pot1 = analogRead(POT1_PIN);
+    data.stick1.btn = !digitalRead(STICK1_BTN);
+    data.stick1.x = analogRead(STICK1_X);
+    data.stick1.y = analogRead(STICK1_Y);
+    data.stick2.btn = !digitalRead(STICK2_BTN);
+    data.stick2.x = analogRead(STICK2_X);
+    data.stick2.y = analogRead(STICK2_Y);
+
+    #ifdef IS_DEBUG
+      logger.printControlsState(data);
+    #endif
+
+    #ifdef RF_ENABLED
+      unsigned long last_time = micros();         //запоминаем время отправки
+      bool response;                              // Успешно ли отправлены данные
+      
+      if (radio.write(&data, sizeof(data))) {
+        if(!radio.available()) {
+          #ifdef IS_DEBUG
+            logger.printResponse(false, last_time, false);
+          #endif
+        } else {
+          while(radio.available()) {
+            radio.read(&response, 1);
     
-    unsigned long last_time = micros();         //запоминаем время отправки
-    bool response;                              // Успешно ли отправлены данные
-    
-    if (radio.write(&data, sizeof(data))) {
-      if(!radio.available()) {
-        Serial.print("Empty");
-        Serial.print(" Time: ");
-        Serial.print(micros()-last_time);
-        Serial.println(" microseconds");
-        Serial.println();
-      } else {
-        while(radio.available()) {
-          radio.read(&response, 1);
-  
-          if (response) {
-            Serial.print("Success");
-            Serial.print("Response Time: ");
-            Serial.print(micros()-last_time);
-            Serial.println(" microseconds");
-            Serial.println();
-          } else {
-            Serial.println("Wrong Key!");
+            if (response) {
+              #ifdef IS_DEBUG
+                logger.printResponse(true, last_time, true);
+              #endif
+            } else {
+              #ifdef IS_DEBUG
+                logger.printResponse(true, last_time, false);
+              #endif
+            }
+            
           }
-          
         }
-      }
-    }   
-    
-    delay(100);  
+      }   
+    #endif
+
+    #ifdef IS_DEBUG
+      delay(1000);
+    #else
+      delay(100);
+    #endif
   }
   
 }
+
+/* ----------------------------------------- */
 
 int scanChannels () {
   static bool isSetUp = false;
@@ -133,29 +192,35 @@ int scanChannels () {
   byte resultValues[numChannels] = {0};
   unsigned short scanRepeats = 100;
 
-  if (!isSetUp) {
-     Serial.println("Start Scanning for Free Channels...");
-  //  radio.startListening();
-  //  radio.stopListening();
-  //  radio.setAutoAck(0);
-    
-    // Print out header, high then low digit
-    for (int i = 0; i < numChannels; i++) {
-      Serial.print(i>>4);
+  #ifdef IS_DEBUG
+    if (!isSetUp) {
+       Serial.println("Start Scanning for Free Channels...");
+    //  radio.startListening();
+    //  radio.stopListening();
+    //  radio.setAutoAck(0);
+      
+      // Print out header, high then low digit
+      for (int i = 0; i < numChannels; i++) {
+        Serial.print(i>>4);
+      }
+      Serial.println();
+      for (int i = 0; i < numChannels; i++) {
+        Serial.print(i&0xf, HEX);
+      }
+      Serial.println();
+  
+      isSetUp = true;
     }
-    Serial.println();
-    for (int i = 0; i < numChannels; i++) {
-      Serial.print(i&0xf, HEX);
-    }
-    Serial.println();
-
-    isSetUp = true;
-  }
+  #endif
 
   for (int k = 0; k < numberOfScans; k ++) {
-    Serial.print("Scaning");
+    #ifdef IS_DEBUG
+      Serial.print("Scaning");
+    #endif
     for (int i = 0; i < scanRepeats; i ++) {
-      Serial.print('.');
+      #ifdef IS_DEBUG
+        Serial.print('.');
+      #endif
       for (int j = 0; j < numChannels; j ++) {
         radio.setChannel(j);
         radio.startListening();
@@ -172,7 +237,9 @@ int scanChannels () {
       resultValues[i] += values[i];
       values[i] = 0;
     }
-    Serial.println();
+    #ifdef IS_DEBUG
+      Serial.println();
+    #endif
   }
 
   byte bestPositionStart = 0;
@@ -205,7 +272,9 @@ int scanChannels () {
       currentPositionStart = 0;
       currentPositionClearLength = 0;
     }
-    Serial.print(resultValues[i], HEX);
+    #ifdef IS_DEBUG
+      Serial.print(resultValues[i], HEX);
+    #endif
   }
 
   int resultBestStart = 0;
@@ -218,6 +287,61 @@ int scanChannels () {
   } else {
     return -1;
   }
-  
+ 
   return resultBestStart;
+}
+
+void DebugLogger::printFreeChannel(int freeChannel) {
+  Serial.println();
+  Serial.print("Set channel: ");
+  Serial.println(freeChannel, HEX);
+}
+
+void DebugLogger::printFreeChannel() {
+  Serial.println("Error: No free Channels!");
+}
+
+void DebugLogger::printControlsState(Data data) {
+  Serial.print("btn1: ");
+  Serial.println(data.btn1);
+  Serial.print("btn2: ");
+  Serial.println(data.btn2);
+  Serial.print("btn3: ");
+  Serial.println(data.btn3);
+  Serial.print("btn4: ");
+  Serial.println(data.btn4);
+  Serial.print("pot1: ");
+  Serial.println(data.pot1);
+  Serial.print("stick1: ");
+  Serial.print(data.stick1.x);
+  Serial.print(" ");
+  Serial.print(data.stick1.y);
+  Serial.print(" ");
+  Serial.println(data.stick1.btn);
+  Serial.print("stick2: ");
+  Serial.print(data.stick2.x);
+  Serial.print(" ");
+  Serial.print(data.stick2.y);
+  Serial.print(" ");
+  Serial.println(data.stick2.btn);
+}
+
+void DebugLogger::printResponse(bool isRadioAvailable, int lastTime, bool response) {
+  if (!isRadioAvailable) {
+    Serial.print("Empty");
+    Serial.print(" Time: ");
+    Serial.print(micros()-lastTime);
+    Serial.println(" microseconds");
+    Serial.println();
+  } else {
+    if (response) {
+      Serial.print("Success");
+      Serial.print("Response Time: ");
+      Serial.print(micros()-lastTime);
+      Serial.println(" microseconds");
+      Serial.println();
+    } else {
+      Serial.println("Wrong key");
+    }
+  }
 }
