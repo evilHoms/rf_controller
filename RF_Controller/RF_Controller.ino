@@ -11,7 +11,7 @@
 #include "RF24.h"
 
 #define KEY 1234 // Ключ безопасности, только при ответе с данным ключем будет произведено подключение
-#define SCAN_ENABLED // Если включено, ищется наиболее чистый канал
+//#define SCAN_ENABLED // Если включено, ищется наиболее чистый канал
 #define NUMBER_OF_SCANS 3 // Сила сканирования, чем больше, тем выше шанс избежать каналы с шумами, каждая итерация ~10 секунд
 #define DEFAULT_CHANNEL 0x60 // Канал, если отключено сканирование
 #define IS_DEBUG // Выводятся сообщения отладки
@@ -30,7 +30,10 @@
 #define STICK2_Y A4
 #define STICK2_BTN 2
 
-RF24 radio(10,9); // "создать" модуль на пинах 9 и 10 Для Уно
+#define CE_PIN 9
+#define SCN_PIN 10
+
+RF24 radio(CE_PIN, SCN_PIN);
 //RF24 radio(9,53); // для Меги
 
 byte address[][6] = {"1Node","2Node","3Node","4Node","5Node","6Node"};  //возможные номера труб
