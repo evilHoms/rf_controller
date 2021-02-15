@@ -30,8 +30,8 @@
 #define STICK2_Y A4
 #define STICK2_BTN 2
 
-#define CE_PIN 9
-#define SCN_PIN 10
+#define CE_PIN 10
+#define SCN_PIN 9
 
 RF24 radio(CE_PIN, SCN_PIN);
 //RF24 radio(9,53); // для Меги
@@ -151,8 +151,9 @@ void loop(void) {
     #ifdef RF_ENABLED
       unsigned long last_time = micros();         //запоминаем время отправки
       bool response;                              // Успешно ли отправлены данные
+      byte testRequest = 13;
       
-      if (radio.write(&data, sizeof(data))) {
+      if (radio.write(&testRequest, 1)) {
         if(!radio.available()) {
           #ifdef IS_DEBUG
             logger.printResponse(false, last_time, false);
