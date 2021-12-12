@@ -12,7 +12,7 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
-RF24 radio(9,10); // "создать" модуль на пинах 9 и 10 Для Уно
+RF24 radio(10,9); // "создать" модуль на пинах 9 и 10 Для Уно
 //RF24 radio(9,53); // для Меги
 
 byte address[][6] = {"1Node","2Node","3Node","4Node","5Node","6Node"};  //возможные номера труб
@@ -26,7 +26,7 @@ void setup(){
   radio.setPayloadSize(32);     //размер пакета, в байтах
 
   radio.openReadingPipe(1,address[0]);      //хотим слушать трубу 0
-  radio.setChannel(0x60);  //выбираем канал (в котором нет шумов!)
+  radio.setChannel(0x70);  //выбираем канал (в котором нет шумов!)
 
   radio.setPALevel (RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
   radio.setDataRate (RF24_1MBPS); //скорость обмена. На выбор RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
@@ -40,10 +40,13 @@ void setup(){
 
 void loop(void) {
 
-    byte pipeNo, gotByte;                          
+    byte pipeNo, gotByte;
+    long int gotLong;
+    byte res = 17;
+    byte test[8];                
     while( radio.available(&pipeNo)){    // слушаем эфир со всех труб
-      radio.read( &gotByte, 1 );         // чиатем входящий сигнал
-      radio.writeAckPayload(pipeNo,&gotByte, 1 );  // отправляем обратно то что приняли
-      Serial.print("Recieved: "); Serial.println(gotByte); 
+      radio.read( &test, 8 );         // чиатем входящий сигнал
+      radio.writeAckPayload(pipeNo,&res, 1 );  // отправляем обратно то что приняли
+      Serial.print("Recieved: "); for (byte i = 0; i < sizeof(test); i ++) Serial.print(test[i]); Serial.print("Time: ");Serial.println(micros());
    }
 }
