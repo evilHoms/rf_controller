@@ -12,41 +12,78 @@
 #include "nRF24L01.h"
 #include "RF24.h"
 
-RF24 radio(10,9); // "создать" модуль на пинах 9 и 10 Для Уно
-//RF24 radio(9,53); // для Меги
+RF24 radio(10,9); // CE, CNE pins
 
-byte address[][6] = {"1Node","2Node","3Node","4Node","5Node","6Node"};  //возможные номера труб
+/**
+ * Transmitter and reciever have to use same tag.
+ * also called as software channel.
+ * is used to verify, that data is sent for exact reciever
+ */
+byte address[][6] = {"1Node","2Node","3Node","4Node","5Node","6Node"};  // pipe tags
+byte isReciever = true;
+
+int request = 0;
 
 void setup(){
   Serial.begin(9600); //открываем порт для связи с ПК
-  radio.begin(); //активировать модуль
-  radio.setAutoAck(1);         //режим подтверждения приёма, 1 вкл 0 выкл
-  radio.setRetries(0,15);     //(время между попыткой достучаться, число попыток)
-  radio.enableAckPayload();    //разрешить отсылку данных в ответ на входящий сигнал
-  radio.setPayloadSize(32);     //размер пакета, в байтах
 
-  radio.openReadingPipe(1,address[0]);      //хотим слушать трубу 0
-  radio.setChannel(0x70);  //выбираем канал (в котором нет шумов!)
+  while (!Serial) {
+    // some boards need to wait to ensure access to serial over USB
+  }
 
-  radio.setPALevel (RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
-  radio.setDataRate (RF24_1MBPS); //скорость обмена. На выбор RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
+  while (!radio.begin()) {
+    Serial.println(F("radio hardware is not responding!!"));
+    delay(1000);
+  }
+
+  radio.setRetries(0,15);     // (время между попыткой достучаться, число попыток)
+  radio.setPayloadSize(sizeof(request));     // размер пакета, в байтах
+
+  radio.openReadingPipe(1, address[0]);      // хотим слушать трубу 0
+
+  // Remove this line, or change channel in case if got error during sending request
+  radio.setChannel(77);  //выбираем канал (в котором нет шумов!)
+
+  radio.setPALevel(RF24_PA_MAX); //уровень мощности передатчика. На выбор RF24_PA_MIN, RF24_PA_LOW, RF24_PA_HIGH, RF24_PA_MAX
+  radio.setDataRate(RF24_1MBPS); //скорость обмена. На выбор RF24_2MBPS, RF24_1MBPS, RF24_250KBPS
   //должна быть одинакова на приёмнике и передатчике!
   //при самой низкой скорости имеем самую высокую чувствительность и дальность!!
   // ВНИМАНИЕ!!! enableAckPayload НЕ РАБОТАЕТ НА СКОРОСТИ 250 kbps!
+
+  /**
+   * Auto Acknoledge
+   * if setAutoAck is enabled, transmitter will automatically get
+   * acknoledge packets from reciever.
+   * if enableAckPayload called, then reciever will be able to
+   * put some custom payload to acknoledge packets
+   */
+//  radio.setAutoAck(1);         // enable or disable auto acknoledge, enabled by default
+  radio.enableAckPayload();    // allow add payload to acknoledge packets
   
   radio.powerUp(); //начать работу
   radio.startListening();  //начинаем слушать эфир, мы приёмный модуль
+
+  Serial.println(F("Radio connected as reciever!!"));
+  Serial.print(F("Listening pipe: "));
+  Serial.println((char*)address[0]);
+  Serial.print(F("On channel: "));
+  Serial.println(radio.getChannel());
 }
 
 void loop(void) {
+    byte pipeNo;        
+    while (radio.available(&pipeNo)){    // слушаем эфир со всех труб
+      byte payloadSize = radio.getPayloadSize();
+      radio.read(&request, payloadSize);         // чиатем входящий сигнал
+      
+      request += 1;
+      if (request > 256) {
+        request = 0;
+      }
+      
+      radio.writeAckPayload(pipeNo, &request, payloadSize);  // отправляем обратно то что приняли
 
-    byte pipeNo, gotByte;
-    long int gotLong;
-    byte res = 17;
-    byte test[8];                
-    while( radio.available(&pipeNo)){    // слушаем эфир со всех труб
-      radio.read( &test, 8 );         // чиатем входящий сигнал
-      radio.writeAckPayload(pipeNo,&res, 1 );  // отправляем обратно то что приняли
-      Serial.print("Recieved: "); for (byte i = 0; i < sizeof(test); i ++) Serial.print(test[i]); Serial.print("Time: ");Serial.println(micros());
+      Serial.print("Recieved: ");
+      Serial.println(request);
    }
 }

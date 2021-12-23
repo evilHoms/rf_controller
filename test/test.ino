@@ -10,24 +10,34 @@ uint8_t values[num_channels];
 void setup(void)
 {
   Serial.begin(9600);
+  while (!Serial) {
+    // some boards need to wait to ensure access to serial over USB
+  }
+
+  while (!radio.begin()) {
+    // check is radio module connected and ready
+    Serial.println(F("radio hardware is not responding!!"));
+    delay(1000);    
+  }
+
   printf_begin();
-  radio.begin();
+
   radio.setAutoAck(false);
   radio.startListening();
 
-  radio.printDetails();  // Вот эта строка напечатает нам что-то, если все правильно соединили.
-  delay(5000);              // И посмотрим на это пять секунд.
+  radio.printDetails();  // print radio module details
+  delay(1000);
 
   radio.stopListening();
-  int i = 0;    // А это напечатает нам заголовки всех 127 каналов
+  int i = 0;    // print channels headers
   while ( i < num_channels )  {
-    printf("%x",i>>4);
+    printf("%x", i>>4);
     ++i;
   }
   printf("\n\r");
   i = 0;
   while ( i < num_channels ) {
-    printf("%x",i&0xf);
+    printf("%x", i&0xf);
     ++i;
   }
   printf("\n\r");
