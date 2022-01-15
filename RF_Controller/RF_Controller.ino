@@ -9,14 +9,8 @@ others for analog values.
 #include "RF24Service.h"
 #include "DebugLogger.h"
 
-#define OK_STATUS 2
-#define EMPTY_STATUS 4
-#define ERROR_STATUS 5
-//#define SCAN_ENABLED // Если включено, ищется наиболее чистый канал
-//#define NUMBER_OF_SCANS 2 // Сила сканирования, чем больше, тем выше шанс избежать каналы с шумами, каждая итерация ~10 секунд
-//#define DEFAULT_CHANNEL 0x70 // Канал, если отключено сканирование
 #define IS_DEBUG                  // To show debug info in Serial
-//#define RF_ENABLED                // Can be disabled in testing purpuses
+#define RF_ENABLED                // Can be disabled in testing purpuses
 
 #define BTN1_PIN 4
 #define BTN2_PIN 5
@@ -36,6 +30,8 @@ others for analog values.
 
 RF24Service radio(CE_PIN, SCN_PIN);
 byte address[][6] = {"1Node","2Node","3Node","4Node","5Node","6Node"};
+const unsigned short CONNECTED_DELAY = 50;
+const unsigned short DISCONNECTED_DELAY = 500;
 
 byte convertedData[8]; // Byte data to transmit
 
@@ -60,68 +56,48 @@ void setup(){
      * Set RF24 configurations
      */
     radio.init(RF24_PA_MAX, RF24_1MBPS, sizeof(convertedData));
-
-    radio.showDebug();
-    radio.setChannel(radio.scanChannels(10));
-
     radio.asTransmitter();
-    radio.enableAckPayload();
+    logger.begin();
 
     #ifdef IS_DEBUG
-      Serial.print("Send status: ");
-      Serial.println(OK_STATUS);
-      Serial.println("Set best channel. Waiting for reciever...");
+      Serial.println("Waiting for reciever...");
     #endif
   #endif
 }
 
 void loop(void) {
-  bool skipRf = false;
-  #ifndef RF_ENABLED
-    skipRf = true;
-  #endif
-  
-  if (!skipRf && !radio.waitForConnection(OK_STATUS)) {
-    delay(500);
+  dataFromPinsToBytes();
+  logger.printControlsState(convertedData);
+
+  unsigned short delayValue = CONNECTED_DELAY;                // Value of delay, if no acknoledge
+
+  #ifdef RF_ENABLED
+  bool res = radio.send(&convertedData, sizeof(convertedData));  // Same as write, but track additional information
+
+  if (res) {
+    if (!radio.isConnected()) {
+      radio.connect();
+    }
+    logger.printResponseInfo(radio.lastResponseTime());
   } else {
-    dataFromPinsToBytes();
+    if (radio.isConnected()) {
+      logger.timeOut();
 
-    #ifdef IS_DEBUG
-      logger.printControlsState(convertedData);
-    #endif
-
-    #ifdef RF_ENABLED
-      bool res = radio.send(&convertedData, sizeof(convertedData));
-  
-      if (res) {
-        #ifdef IS_DEBUG
-          logger.printResponseInfo(radio.lastResponseTime());
-        #endif
-  
-        if (radio.available()) {                                 // check for acknoledge payload
-          byte resStatus;
-          radio.read(&resStatus, sizeof(resStatus));
-  
-          #ifdef IS_DEBUG
-            logger.printResponseAck(resStatus);
-          #endif
-        }
-      } else {
-        Serial.println(F("Transmission failed or timed out"));
-  
-        if (radio.fails() > 10) {
-          Serial.println("Disconnect...");
-          radio.disconnect();
-          radio.resetFails();
-        }
+      if (radio.fails() > 10) {
+        radio.disconnect();
+        logger.disconnect();
+        radio.resetFails();
       }
-    #endif
+    } else {
+      delayValue = DISCONNECTED_DELAY;                            // Set longer delay value if no acknoledge
+    }
   }
+  #endif
 
   #ifndef IS_DEBUG
-    delay(50);
+    delay(delayValue);
   #else
-    delay(1000);
+    delay(delayValue * 10);
   #endif
 }
 
