@@ -34,53 +34,55 @@
 #define CE_PIN 10
 #define SCN_PIN 9
 
-void getDataFromPins();
-void destruct();
-bool sendDestructedData(byte order);
+//void getDataFromPins();
+//void destruct();
+//bool sendDestructedData(byte order);
 
 RF24Service radio(CE_PIN, SCN_PIN);
 byte address[][6] = {"1Node","2Node","3Node","4Node","5Node","6Node"};
 
-typedef struct {
-  bool btn;
-  byte x;
-  byte y;
-}
-Stick;
-
-typedef struct {
-  bool btn1;
-  bool btn2;
-  bool btn3;
-  bool btn4;
-  byte pot1;
-  Stick stick1;
-  Stick stick2;
-}
-Data;
-Data data;
+//typedef struct {
+//  bool btn;
+//  byte x;
+//  byte y;
+//}
+//Stick;
+//
+//typedef struct {
+//  bool btn1;
+//  bool btn2;
+//  bool btn3;
+//  bool btn4;
+//  byte pot1;
+//  Stick stick1;
+//  Stick stick2;
+//}
+//Data;
+//Data data;
 
 byte b[8]; // Byte data to transmit
 
-typedef struct {
-  byte order;
-  byte value1;
-  byte value2;
-  byte value3;
-}
-DestructedData;
-
-DestructedData destructedData;
-DestructedData dDataSet[4];
+//typedef struct {
+//  byte order;
+//  byte value1;
+//  byte value2;
+//  byte value3;
+//}
+//DestructedData;
+//
+//DestructedData destructedData;
+//DestructedData dDataSet[4];
 
 int scanChannels();
-void dataToBytes();
+//void dataToBytes();
+
+void dataFromPinsToBytes();
 
 class DebugLogger {
   public:
     void printFreeChannel(int freeChannel);
     void printFreeChannel();
-    void printControlsState(Data data);
+    void printControlsState(byte data[8]);
     void printResponse(bool isRadioAvailable, unsigned long lastTime, bool response);
 };
 
@@ -101,7 +103,7 @@ void setup(){
   #ifdef RF_ENABLED
     radio.init();
     radio.asTransmitter();
-    radio.withPayload();
+    radio.enableAckPayload();
 
     byte channel = DEFAULT_CHANNEL;
     #ifdef SCAN_ENABLED
@@ -116,8 +118,8 @@ void setup(){
     #endif
   #endif
 
-  getDataFromPins();  // Get data from pins for first time
-  dataToBytes();
+//  getDataFromPins();  // Get data from pins for first time
+//  dataToBytes();
 }
 
 
@@ -152,14 +154,9 @@ void loop(void) {
     unsigned long last_time = micros();         //запоминаем время отправки
     byte response;                              // Успешно ли отправлены данные
 
-//    char test[8] = {'h','e','l','l','o',' ','w','o'};
+    dataFromPinsToBytes();
 
     if (radio.write(&b, 8)) {
- 
-//    if (sendDestructedData(0)) {
-//      sendDestructedData(1);
-//      sendDestructedData(2);
-//      sendDestructedData(3);
 
 //      #ifdef IS_DEBUG
 //        logger.printControlsState(data);
@@ -185,9 +182,9 @@ void loop(void) {
       Serial.println("Error");  
     }
 //  #endif
-    getDataFromPins();  // Get data from pins
-    dataToBytes();
-//  destruct(); // Build new destructed data for next request
+    // TODO move before write
+//    getDataFromPins();  // Get data from pins
+//    dataToBytes();
     delay(50);
 //  #ifdef IS_DEBUG
 //    delay(1000);
@@ -208,29 +205,20 @@ void DebugLogger::printFreeChannel() {
   Serial.println("Error: No free Channels!");
 }
 
-void DebugLogger::printControlsState(Data data) {
-  Serial.print("btn1: ");
-  Serial.println(data.btn1);
-  Serial.print("btn2: ");
-  Serial.println(data.btn2);
-  Serial.print("btn3: ");
-  Serial.println(data.btn3);
-  Serial.print("btn4: ");
-  Serial.println(data.btn4);
+void DebugLogger::printControlsState(byte data[8]) {
+  Serial.print("btns: ");
+  Serial.println(data[1]);
   Serial.print("pot1: ");
-  Serial.println(data.pot1);
+  Serial.println(data[2]);
   Serial.print("stick1: ");
-  Serial.print(data.stick1.x);
+  Serial.print(data[3]);
   Serial.print(" ");
-  Serial.print(data.stick1.y);
+  Serial.print(data[4]);
   Serial.print(" ");
-  Serial.println(data.stick1.btn);
   Serial.print("stick2: ");
-  Serial.print(data.stick2.x);
+  Serial.print(data[5]);
   Serial.print(" ");
-  Serial.print(data.stick2.y);
-  Serial.print(" ");
-  Serial.println(data.stick2.btn);
+  Serial.print(data[6]);
 }
 
 void DebugLogger::printResponse(bool isRadioAvailable, unsigned long lastTime, bool response) {
@@ -253,61 +241,71 @@ void DebugLogger::printResponse(bool isRadioAvailable, unsigned long lastTime, b
   }
 }
 
-void destruct() {
-  for (byte i = 0; i < 4; i++) {
-    dDataSet[i].order = i;
-    
-    switch (i) {
-      case 0:
-//        dDataSet[i].value1 = data.key;
-        dDataSet[i].value2 = data.btn1;
-        dDataSet[i].value3 = data.btn2;
-        break;
-      case 1:
-        dDataSet[i].value1 = data.btn3;
-        dDataSet[i].value2 = data.btn4;
-        dDataSet[i].value3 = data.pot1;
-        break;
-      case 2:
-        dDataSet[i].value1 = data.stick1.btn;
-        dDataSet[i].value2 = data.stick1.x;
-        dDataSet[i].value3 = data.stick1.y;
-        break;
-      case 3:
-        dDataSet[i].value1 = data.stick2.btn;
-        dDataSet[i].value2 = data.stick2.x;
-        dDataSet[i].value3 = data.stick2.y;
-        break;
-      default:
-        break;
-    }
-  }
-}
+//void destruct() {
+//  for (byte i = 0; i < 4; i++) {
+//    dDataSet[i].order = i;
+//    
+//    switch (i) {
+//      case 0:
+////        dDataSet[i].value1 = data.key;
+//        dDataSet[i].value2 = data.btn1;
+//        dDataSet[i].value3 = data.btn2;
+//        break;
+//      case 1:
+//        dDataSet[i].value1 = data.btn3;
+//        dDataSet[i].value2 = data.btn4;
+//        dDataSet[i].value3 = data.pot1;
+//        break;
+//      case 2:
+//        dDataSet[i].value1 = data.stick1.btn;
+//        dDataSet[i].value2 = data.stick1.x;
+//        dDataSet[i].value3 = data.stick1.y;
+//        break;
+//      case 3:
+//        dDataSet[i].value1 = data.stick2.btn;
+//        dDataSet[i].value2 = data.stick2.x;
+//        dDataSet[i].value3 = data.stick2.y;
+//        break;
+//      default:
+//        break;
+//    }
+//  }
+//}
+//
+//bool sendDestructedData(byte order) {
+//  DestructedData d = dDataSet[order];
+//  return radio.write(&d, sizeof(d));
+//}
 
-bool sendDestructedData(byte order) {
-  DestructedData d = dDataSet[order];
-  return radio.write(&d, sizeof(d));
-}
+//void getDataFromPins() {
+//  //  Build object to transmit
+//  data.btn1 = !digitalRead(BTN1_PIN);
+//  data.btn2 = !digitalRead(BTN2_PIN);
+//  data.btn3 = !digitalRead(BTN3_PIN);
+//  data.btn4 = !digitalRead(BTN4_PIN);
+//  data.pot1 = max(1, analogRead(POT1_PIN) >> 2);
+//  data.stick1.btn = !digitalRead(STICK1_BTN);
+//  data.stick1.x = max(1, analogRead(STICK1_X) >> 2);
+//  data.stick1.y = max(1, analogRead(STICK1_Y) >> 2);
+//  data.stick2.btn = !digitalRead(STICK2_BTN);
+//  data.stick2.x = max(1, analogRead(STICK2_X) >> 2);
+//  data.stick2.y = max(1, analogRead(STICK2_Y) >> 2);
+//}
 
-void getDataFromPins() {
+void dataFromPinsToBytes() {
   //  Build object to transmit
-  data.btn1 = !digitalRead(BTN1_PIN);
-  data.btn2 = !digitalRead(BTN2_PIN);
-  data.btn3 = !digitalRead(BTN3_PIN);
-  data.btn4 = !digitalRead(BTN4_PIN);
-  data.pot1 = max(1, analogRead(POT1_PIN) >> 2);
-  data.stick1.btn = !digitalRead(STICK1_BTN);
-  data.stick1.x = max(1, analogRead(STICK1_X) >> 2);
-  data.stick1.y = max(1, analogRead(STICK1_Y) >> 2);
-  data.stick2.btn = !digitalRead(STICK2_BTN);
-  data.stick2.x = max(1, analogRead(STICK2_X) >> 2);
-  data.stick2.y = max(1, analogRead(STICK2_Y) >> 2);
-}
+//  data.btn1 = !digitalRead(BTN1_PIN);
+//  data.btn2 = !digitalRead(BTN2_PIN);
+//  data.btn3 = !digitalRead(BTN3_PIN);
+//  data.btn4 = !digitalRead(BTN4_PIN);
+//  data.pot1 = max(1, analogRead(POT1_PIN) >> 2);
+//  data.stick1.btn = !digitalRead(STICK1_BTN);
+//  data.stick1.x = max(1, analogRead(STICK1_X) >> 2);
+//  data.stick1.y = max(1, analogRead(STICK1_Y) >> 2);
+//  data.stick2.btn = !digitalRead(STICK2_BTN);
+//  data.stick2.x = max(1, analogRead(STICK2_X) >> 2);
+//  data.stick2.y = max(1, analogRead(STICK2_Y) >> 2);
 
-/*
- * Take data from struct and build array of 8 bytes to transmit
- */
-void dataToBytes() {
   b[0] = KEY;
 
   // 0  - all false;
@@ -320,18 +318,50 @@ void dataToBytes() {
   // 63 - 1 1 1 1 1 1
   byte btns[] = {1, 2, 4, 8, 16, 32};
   b[1] = 0; // state of all btns;
-  if (data.btn1) b[1] += btns[0];
-  if (data.btn2) b[1] += btns[1];
-  if (data.btn3) b[1] += btns[2];
-  if (data.btn4) b[1] += btns[3];
-  if (data.stick1.btn) b[1] += btns[4];
-  if (data.stick2.btn) b[1] += btns[5];
+  if (!digitalRead(BTN1_PIN)) b[1] += btns[0];
+  if (!digitalRead(BTN2_PIN)) b[1] += btns[1];
+  if (!digitalRead(BTN3_PIN)) b[1] += btns[2];
+  if (!digitalRead(BTN4_PIN)) b[1] += btns[3];
+  if (!digitalRead(STICK1_BTN)) b[1] += btns[4];
+  if (!digitalRead(STICK2_BTN)) b[1] += btns[5];
  
-  b[2] = data.pot1; // pot1
-  b[3] = data.stick1.x; // stick1 x
-  b[4] = data.stick1.y; // stick1 y
-  b[5] = data.stick2.x; // stick2 x
-  b[6] = data.stick2.y; // stick2 y
+  b[2] = max(1, analogRead(POT1_PIN) >> 2); // pot1
+  b[3] = max(1, analogRead(STICK1_X) >> 2); // stick1 x
+  b[4] = max(1, analogRead(STICK1_Y) >> 2); // stick1 y
+  b[5] = max(1, analogRead(STICK2_X) >> 2); // stick2 x
+  b[6] = max(1, analogRead(STICK2_Y) >> 2); // stick2 y
 
   b[7] = 0; // last byte
 }
+
+/*
+ * Take data from struct and build array of 8 bytes to transmit
+ */
+//void dataToBytes() {
+//  b[0] = KEY;
+//
+//  // 0  - all false;
+//  // 1  - 0 0 0 0 0 1;
+//  // 2  - 0 0 0 0 1 0;
+//  // ...
+//  // 31 - 0 1 1 1 1 1;
+//  // 32 - 1 0 0 0 0 0;
+//  // ...
+//  // 63 - 1 1 1 1 1 1
+//  byte btns[] = {1, 2, 4, 8, 16, 32};
+//  b[1] = 0; // state of all btns;
+//  if (data.btn1) b[1] += btns[0];
+//  if (data.btn2) b[1] += btns[1];
+//  if (data.btn3) b[1] += btns[2];
+//  if (data.btn4) b[1] += btns[3];
+//  if (data.stick1.btn) b[1] += btns[4];
+//  if (data.stick2.btn) b[1] += btns[5];
+// 
+//  b[2] = data.pot1; // pot1
+//  b[3] = data.stick1.x; // stick1 x
+//  b[4] = data.stick1.y; // stick1 y
+//  b[5] = data.stick2.x; // stick2 x
+//  b[6] = data.stick2.y; // stick2 y
+//
+//  b[7] = 0; // last byte
+//}
